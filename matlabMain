@@ -1,0 +1,206 @@
+%Load the previously calculated camera parameters, as well as the square
+%size they were calculated with
+clc,clear,close all;
+pause(3);
+load('AprilcalibrationData.mat');
+intrinsics = params.Intrinsics;
+
+%Connect to the first webcam in the list(modify as needed)
+%camlist = webcamlist %<- Will return list of webcams
+cam = webcam(1);
+
+%Connect to arduino
+arduino = serialport("COM4", 9600, "Timeout", 300);   %Will wait for a minute to receive a command 
+[x,y,depth,tag] = findAprils(10, cam, intrinsics);
+display("x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+
+while(1)
+    input = readline(arduino);  %Waiting for commands from arduino to search for a flower
+    disp(input);
+    if contains(input,"searchflower")
+        %Search for the highest april tag in the 1-10 range. If 1-10 are not found, send a
+        %response to the arduino
+
+        [x,y,depth,tag] = findAprils(10, cam, intrinsics);
+
+        %write the positions of the top right pixels and the depth
+        display("x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        %writeline(arduino, "x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        if tag ~= 0
+            writeline(arduino, "yes");
+        else
+            writeline(arduino, "no");
+        end
+    elseif contains(input, "centerflower")
+        [x,y,depth,tag] = findAprils(10, cam, intrinsics);
+        display("x:" + x + " y:" + y + " z:" + depth + " tag:" + tag);
+        writeline(arduino, string(tag))
+        writeline(arduino, string(x))
+
+    elseif contains(input, "getz")
+        writeline(arduino, string(depth))
+
+    elseif contains(input,"searchred")
+        %Search for the highest april tag in the 1-10 range. If 1-10 are not found, send a
+        %response to the arduino
+        disp("searching red");
+        [x,y,depth,tag] = findAprils(21, cam, intrinsics);
+
+        %write the positions of the top right pixels and the depth
+        disp("x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        %writeline(arduino, "x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        if tag ~= 0
+            writeline(arduino, "yes");
+        else
+            writeline(arduino, "no");
+        end
+
+    elseif contains(input,"searchyellow")
+        %Search for the highest april tag in the 1-10 range. If 1-10 are not found, send a
+        %response to the arduino
+        disp("searching yellow");
+        [x,y,depth,tag] = findAprils(22, cam, intrinsics);
+
+        %write the positions of the top right pixels and the depth
+        disp("x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        %writeline(arduino, "x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        if tag ~= 0
+            writeline(arduino, "yes");
+        else
+            writeline(arduino, "no");
+        end
+
+    elseif contains(input,"searchblue")
+        %Search for the highest april tag in the 1-10 range. If 1-10 are not found, send a
+        %response to the arduino
+        disp("searching blue");
+        [x,y,depth,tag] = findAprils(23, cam, intrinsics);
+
+        %write the positions of the top right pixels and the depth
+        disp("x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        %writeline(arduino, "x:" + x + "y:" + y + "z:" + depth + "tag:" + tag);
+        if tag ~= 0
+            writeline(arduino, "yes");
+        else
+            writeline(arduino, "no");
+        end
+    
+    elseif contains(input, "centerred")
+        [x,y,depth,tag] = findAprils(21, cam, intrinsics);
+        disp("centering red");
+        disp("x:" + x + " y:" + y + " z:" + depth + " tag:" + tag);
+        writeline(arduino, string(tag))
+        writeline(arduino, string(x))
+
+    elseif contains(input, "centeryellow")
+        disp("centering yellow");
+        [x,y,depth,tag] = findAprils(22, cam, intrinsics);
+        display("x:" + x + " y:" + y + " z:" + depth + " tag:" + tag);
+        writeline(arduino, string(tag))
+        writeline(arduino, string(x))
+
+
+   elseif contains(input, "centerblue")
+        [x,y,depth,tag] = findAprils(23, cam, intrinsics);
+        disp("centering blue");
+        disp("x:" + x + " y:" + y + " z:" + depth + " tag:" + tag);
+        writeline(arduino, string(tag))
+        writeline(arduino, string(x))
+        
+    end
+end
+
+
+function [x,y,z,ID] = findAprils(tag, cam, intrinsics)
+    disp("Looking for: " + tag);
+    x = -1;
+    y = -1;
+    z = 0;
+    ID = 0;
+
+    center_Xpixel = 800;
+    center_Ypixel = 600;
+    tagFamily = 'tag36h11';
+
+    % what the camera is seeing. Useful for debugging
+    I = snapshot(cam);
+    figure(1)
+    imshow(I) 
+
+    %% Detect AprilTags in image. Estimations in mm
+    tagSize = 8.3 / 1000;
+    [id, loc, pose] = readAprilTag(I, tagFamily, intrinsics, tagSize);
+
+    %if tag is 10, then we're looking for flowers, otherwise we're looking
+    %for a specific color, defined by "tag." 
+    if tag == 10
+        range = 10;
+    else
+        range = tag;
+    end
+
+    %The range will limit the apriltag search to that particular ID defined by "tag" (1-10 for any
+    %flower, and the exact ID for a color)
+    len = length(id);
+    if len > range
+        len = range;
+    end
+
+    if len ~= 0
+        %we found some tags
+        for idx = 1:len
+            % Display the ID and tag family
+            disp("Detected Tag ID: " + id(idx));
+        
+            ID = id(idx);
+
+            % Insert markers to indicate the locations
+            markerRadius = 2;
+            numCorners = size(loc,1);
+            markerPosition = [loc(:,:,idx),repmat(markerRadius,numCorners,1)];
+            I = insertShape(I,"FilledCircle",markerPosition,ShapeColor="red",Opacity=1);
+
+            if(ID == range) %Don't look for other tags if this is the specific one we want
+                break;
+            end
+        end
+    
+        %make sure you found an actual april tag we want and not just a
+        %random one... If the ID is higher than the range, return 0
+        if range > 10 && ID ~= range %we are searching for a specific object
+            ID = 0;
+        end
+        if ID > range
+            ID = 0;
+        end
+
+        imshow(I)
+                
+        z = pose(idx).Translation(3) * 1000; %convert to MM
+        
+        %grab X and Y pixels of the "first" (top right, usually) corner of the desired aprilTag
+        %(referenced to the principal point)
+        x = loc(1,1,idx) - center_Xpixel; %if positive, the corner is to the right of the star, move right
+        y = loc(1,2,idx) - center_Ypixel; %if positive, the corner is below the star, move down
+        
+        %If the pixels are closer enough to the center, then call them
+        %centered
+        if (abs(x) < 40)
+            x = 0;
+        end
+        if (abs(y) < 40)
+            y = 0;
+        end
+
+        % Draw on the image snapshot
+        hold on
+        plot(center_Xpixel,center_Ypixel, '-p', 'MarkerSize', 24, 'MarkerFaceColor', 'red')
+        plot(x + center_Xpixel, y + center_Ypixel, 'm*', 'MarkerSize', 24)
+        hold off
+    end
+end
+
+
+
+
+
