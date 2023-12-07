@@ -1,0 +1,142 @@
+/*******************************************************************
+ARDUINO TEMPLATE AND NOTES FOR SWEETPEA MK II.
+AUTHOR:   Adam Mulkey
+DATE:     11/26/2023
+PROJECT:  Sweetpea Mk. II
+PURPOSE:  This code is to be used as a template and notes for future codes
+for sweetpea Mk. II. All of this is naturally subject to change. This code
+is intended to be used as either a starting point or experimenting and is
+designed for the Mega 2650 board with 4 UARTS.
+********************************************************************/
+// searchflower
+// centerflower
+// Header files:
+#include "SoftwareSerial.h"
+#include "LobotServoController.h"
+#include <string.h>
+
+
+// Global Constants:
+#define RxPin 19    // Sets pins for UART 1 on mega 2650 board.
+#define TxPin 18
+
+
+/* These constants set the speed for each motor on the MK II. The purpose
+of this is to restrict the robots power so that it does not harm its 
+surroundings or flip itself over (this has happened). Each of the motors can
+run significantly faster, and the speed can be increased if the robot has a 
+sturdy base, though care should still be taken. 
+*/
+
+// servo 1: Gripper opens as distance goes down.
+// servo 2: Gripper rotates counter clockwise as distance goes down.
+// servo 3: Arm moves down as distance goes down. do not raise above 900 for cameral clearence.
+// servo 4: Arm moves down as distance goes up.
+// servo 5: Arm moves down as distance goes down.
+// servo 6: Arm rotates clockwise as distance goes down.
+
+// for kinematics, r2 = 10 [cm], r3 = 9.5 [cm], r4 = 9.5 [cm].
+
+// Global variabl initialization.
+SoftwareSerial mySerial(RxPin, TxPin);
+LobotServoController myController(mySerial);
+LobotServo myServosReset[6];
+
+int n, count = 0, x;
+String incomingComand = "clear", searchflower_response, centerflower_response;
+volatile int currentPos[6], moveTime;
+//=========================================================================
+// Main Script Functions:
+
+// Moves arm parts at a constant speed for each servo, keeping track of kinematics while it does so.
+void move(int servoID, int futurePos){
+
+  myController.moveServo(servoID, futurePos, moveTime);
+  currentPos[servoID - 1] = futurePos;
+}
+//---------------------------------------------------------
+// Resets all servos to position 500.
+void armPos_Reset(){
+  for(n=0; n<6; n++){
+    myController.moveServo(n+1, 500, 1000);
+    currentPos[n] = 500;
+  }
+}
+//---------------------------------------------------------
+
+//==============================================================
+// Board configuration:
+
+void setup() {
+  // put your setup code here, to run once:
+
+  Serial.begin(9600);
+  Serial2.begin(9600);
+  mySerial.begin(9600);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  armPos_Reset();
+  delay(1000);
+
+  
+}
+//============================================================================
+// MAIN LOOP: 
+void loop() {
+  moveTime = 1000;
+  if(count == 0){
+  move(6, 1000);
+  move(5, 873);
+  move(4, 900);
+  move(3, 45);
+  count +=1;
+  }
+  if(Serial2.available()){
+    incomingComand = Serial2.readStringUntil('\n');   // Polls for an incomming UART message from the other Arduino.
+    
+    while(incomingComand != "clear"){
+    searchflower_response = "no";   // Initializes searchflower_response variable in order to enter the whyle loop the first time.
+
+    while(searchflower_response == "no"){
+      Serial.println("searchflower");   // Asks matlab if a flower tag is in the camera frame.
+      while(Serial.available() == 0){};   // Waits for matlab response.
+      searchflower_response = Serial.readStringUntil('\n');   
+      moveTime = 50;
+      if(searchflower_response == "no") move(6, (currentPos[5] - 10));    // Shifts robot to the right if no tag was found.
+      delay(100);
+    }
+    x = 100;
+    while(x>10 || x<-10){   // Initializes x variable in order to enter the while loop the first time.
+      digitalWrite(LED_BUILTIN, HIGH);
+      Serial.println("centerflower");   // Asks matlab if flower is centered in frame.
+      while(Serial.available() == 0){};   // Waits for matlab response.
+      centerflower_response = Serial.readStringUntil('\n');  
+      x = centerflower_response.toInt(); 
+      moveTime = 50;
+      if(x > 10) {
+        move(6, (currentPos[5] + 10));
+        delay(300);
+      }
+
+      else if(x < -10){
+        move(6, (currentPos[5] -10));
+        delay(300);
+        }
+    }
+
+
+
+    incomingComand = "clear";
+    
+    }
+
+  }
+ 
+  
+
+  
+  
+ 
+
+
+}
